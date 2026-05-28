@@ -269,37 +269,51 @@
     async function loadFFmpeg() {
         if (state.ffmpegLoaded && ffmpeg) return;
 
-        const { FFmpeg } = await import('https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/+esm');
-        const { toBlobURL } = await import('https://cdn.jsdelivr.net/npm/@ffmpeg/util@0.12.1/+esm');
+        videoProgressText.textContent = 'FFmpeg 초기화 중...';
+        videoProgressBar.style.width = '2%';
 
-        ffmpeg = new FFmpeg();
+        try {
+            // Use locally hosted UMD builds (loaded via script tags)
+            const { FFmpeg } = FFmpegWASM;
+            const { toBlobURL } = FFmpegUtil;
 
-        ffmpeg.on('progress', ({ progress }) => {
-            const pct = Math.min(Math.max(Math.round(progress * 80) + 10, 10), 90);
-            videoProgressBar.style.width = pct + '%';
-            videoProgressText.textContent = `변환 중... ${pct}%`;
-        });
+            ffmpeg = new FFmpeg();
 
-        ffmpeg.on('log', ({ message }) => {
-            // Update detail with last log line
-            if (message && message.length < 120) {
-                videoProgressDetail.textContent = message;
-            }
-        });
+            ffmpeg.on('progress', ({ progress }) => {
+                const pct = Math.min(Math.max(Math.round(progress * 80) + 10, 10), 90);
+                videoProgressBar.style.width = pct + '%';
+                videoProgressText.textContent = `변환 중... ${pct}%`;
+            });
 
-        const coreURL = await toBlobURL(
-            'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/esm/ffmpeg-core.js',
-            'text/javascript'
-        );
-        const wasmURL = await toBlobURL(
-            'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/esm/ffmpeg-core.wasm',
-            'application/wasm'
-        );
+            ffmpeg.on('log', ({ message }) => {
+                if (message && message.length < 120) {
+                    videoProgressDetail.textContent = message;
+                }
+            });
 
-        await ffmpeg.load({ coreURL, wasmURL });
-        state.ffmpegLoaded = true;
+            videoProgressText.textContent = 'FFmpeg 코어 다운로드 중...';
+            videoProgressBar.style.width = '5%';
 
-        videoProgressText.textContent = 'FFmpeg 로드 완료!';
+            const baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd';
+
+            const coreURL = await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript');
+            videoProgressBar.style.width = '7%';
+
+            const wasmURL = await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm');
+            videoProgressBar.style.width = '9%';
+
+            videoProgressText.textContent = 'FFmpeg 로드 중...';
+
+            // Worker (814.ffmpeg.js) is loaded automatically from same-origin by the UMD bundle
+            await ffmpeg.load({ coreURL, wasmURL });
+            state.ffmpegLoaded = true;
+
+            videoProgressText.textContent = 'FFmpeg 로드 완료!';
+            videoProgressBar.style.width = '10%';
+        } catch (err) {
+            console.error('FFmpeg load error:', err);
+            throw new Error('FFmpeg 로드 실패: ' + (err.message || err));
+        }
     }
 
     // ===== Show Video Result =====
